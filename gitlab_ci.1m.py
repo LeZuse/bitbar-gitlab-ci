@@ -71,11 +71,12 @@ class Job:
         self.status = json["status"]
         self.duration = 0 if json["duration"] is None or self.status == 'running' else int(json["duration"])
         self.commit = json['commit']['title']
+        self.url = json['web_url']
 
     # Jobs name with duration
     def displayName(self):
         return self.name + (' ' + str(self.duration) + 's' if self.duration > 0 else '')
-    
+
 # Pipile
 class Pipeline:
     def __init__ (self, projectName, projectId, json):
@@ -94,7 +95,7 @@ class Pipeline:
         if len(self.runningJobs) > 0:
             strings = []
             for job in self.runningJobs:
-                strings.append(job.displayName()) 
+                strings.append(job.displayName())
 
             jobsString = ', '.join(strings)
 
@@ -119,21 +120,24 @@ class Pipeline:
 
 # Loop the projects and get thy jobs
 for instance in INSTANCES:
-	for name, project in instance['projects'].iteritems():
-		runningPipelines = api(instance, "projects/"+str(project)+"/pipelines?scope=running")
+    for name, project in instance['projects'].iteritems():
+        runningPipelines = api(instance, "projects/"+str(project)+"/pipelines?scope=running")
 
-		for pipelineJson in runningPipelines:
-			pipeline = Pipeline(name, project, pipelineJson)
-			jobsArray = api(instance, "projects/"+str(project)+"/pipelines/"+str(pipeline.id)+"/jobs")
-			if jobsArray.count > 0:
-				pipeline.addJobs(jobsArray)
-				pipelines.append(pipeline)
+        for pipelineJson in runningPipelines:
+            pipeline = Pipeline(name, project, pipelineJson)
+            jobsArray = api(instance, "projects/"+str(project)+"/pipelines/"+str(pipeline.id)+"/jobs")
+            if jobsArray.count > 0:
+                # TODO: https://docs.gitlab.com/ee/api/jobs.html#get-a-log-file
+                pipeline.addJobs(jobsArray)
+                pipelines.append(pipeline)
 
 pipelineCount = len(pipelines)
 if pipelineCount == 0:
     print "💤"
     exit
 
+print 'CI'
+print '---'
 
 ## Render the pipelines names (bitbar will loop)
 for index, pipeline in enumerate(pipelines):
@@ -149,8 +153,8 @@ for index, pipeline in enumerate(pipelines):
 print "---"
 
 for pipeline in pipelines:
-    print '🚀 ' + pipeline.project.name + ' - ' + pipeline.ref + '| color=black'
-    print '-- commit: ' + pipeline.commit + '| color=black'
+    print '🚀 ' + pipeline.project.name + ' - ' + pipeline.ref #+ '| color=black'
+    print '-- commit: ' + pipeline.commit #+ '| color=black'
     print '---'
     for job in pipeline.jobs:
         print stateIcon(job.status) + " ",
@@ -161,6 +165,9 @@ for pipeline in pipelines:
         elif job.status == 'running':
             style = '| color=blue'
 
-        print job.displayName() + style
+        menu = "\n-- Open on web | href=%s" % job.url
 
-        
+        print job.displayName() + style + menu
+
+print '---'
+print 'Update now | refresh=true'
