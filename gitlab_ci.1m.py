@@ -12,6 +12,7 @@
 #
 
 import json
+import datetime
 
 try:
     # For Python 3.0 and later
@@ -70,7 +71,8 @@ class Job:
         self.name = json["stage"] + (": " + json["name"] if json["name"] != json["stage"] else "" )
         self.status = json["status"]
         self.duration = 0 if json["duration"] is None or self.status == 'running' else int(json["duration"])
-        self.commit = json['commit']['title']
+        self.commitTitle = json['commit']['title']
+        self.commitAuthor = json['commit']['author_email']
         self.url = json['web_url']
 
     # Jobs name with duration
@@ -84,8 +86,10 @@ class Pipeline:
         self.id = json["id"]
         self.jobs = []
         self.runningJobs = []
+        self.sha = str(json["sha"])
         self.ref = str(json["ref"])
-        self.commit = None
+        self.commitTitle = None
+        self.commitAuthor = None
 
     # Display name with current running jobs
     def displayName(self):
@@ -110,22 +114,37 @@ class Pipeline:
             self.jobs.append(job)
 
             # Get the commit from the first job
-            if self.commit is None:
-                self.commit = job.commit
+            if self.commitTitle is None:
+                self.commitTitle = job.commitTitle
+            if self.commitAuthor is None:
+                self.commitAuthor = job.commitAuthor
 
             # Check if the job is running for running jobs array
             if job.status == 'running':
                 self.runningJobs.append(job)
 
+        # first jobs on top
+        self.jobs.sort(key=lambda job: job.status, reverse=True)
+
+# class Commit:
+#     def __init__(self, json)
+#         self.id = json["id"]
+#         self.authorEmail = json["author_email"]
+
+# some pipelines get stuck in running state; show only last week
+today = datetime.date.today()
+lastWeek = today - datetime.timedelta(days=7)
 
 # Loop the projects and get thy jobs
+<<<<<<< HEAD
 for instance in INSTANCES:
     for name, project in instance['projects'].iteritems():
-        runningPipelines = api(instance, "projects/"+str(project)+"/pipelines?scope=running")
+        runningPipelines = api(instance, "projects/"+str(project)+"/pipelines?scope=running&per_page=100&updated_after="+lastWeek.isoformat())
 
         for pipelineJson in runningPipelines:
             pipeline = Pipeline(name, project, pipelineJson)
-            jobsArray = api(instance, "projects/"+str(project)+"/pipelines/"+str(pipeline.id)+"/jobs")
+            # commit = Commit(api("projects/"+str(project)+"/repository/commits/"+str(pipeline.id)+"/jobs?per_page=100"))
+            jobsArray = api("projects/"+str(project)+"/pipelines/"+str(pipeline.id)+"/jobs?per_page=100&sort=desc&order_by=id")
             if jobsArray.count > 0:
                 # TODO: https://docs.gitlab.com/ee/api/jobs.html#get-a-log-file
                 pipeline.addJobs(jobsArray)
@@ -136,11 +155,16 @@ if pipelineCount == 0:
     print "💤"
     exit
 
-print 'CI'
-print '---'
+# Mini-UI
+# print 'CI'
+# print '---'
 
+myPipelines = [p for p in pipelines if p.commitAuthor == 'me@tomasr.com']
+otherPipelines = [p for p in pipelines if p not in myPipelines]
+
+# TODO: loop only mine?
 ## Render the pipelines names (bitbar will loop)
-for index, pipeline in enumerate(pipelines):
+for index, pipeline in enumerate(myPipelines):
     print '🚀 ',
 
     if pipelineCount > 1:
@@ -148,26 +172,43 @@ for index, pipeline in enumerate(pipelines):
 
     print pipeline.displayName()
 
+if not len(myPipelines):
+    print 'CI'
 
 ## Start menu
 print "---"
 
-for pipeline in pipelines:
-    print '🚀 ' + pipeline.project.name + ' - ' + pipeline.ref #+ '| color=black'
-    print '-- commit: ' + pipeline.commit #+ '| color=black'
+def printPipelines(pipelines):
+    for pipeline in pipelines:
+        print '🚀 ' + pipeline.project.name + ' - ' + pipeline.ref #+ '| color=black'
+        print '-- commit: ' + pipeline.commitTitle #+ '| color=black'
+        print '-- author: ' + pipeline.commitAuthor
+        print '---'
+        for job in pipeline.jobs:
+            print stateIcon(job.status) + " ",
+
+            style = ''
+            if job.status == 'success':
+                style = '| color=green'
+            elif job.status == 'running':
+                style = '| color=blue'
+
+            menu = "\n-- Open on web | href=%s" % job.url
+
+            print job.displayName() + style + menu
+
+if len(myPipelines):
+    print 'My pipelines:'
     print '---'
-    for job in pipeline.jobs:
-        print stateIcon(job.status) + " ",
+    printPipelines(myPipelines)
+else:
+    print "You don't have any running pipelines"
+    print '---'
 
-        style = ''
-        if job.status == 'success':
-            style = '| color=green'
-        elif job.status == 'running':
-            style = '| color=blue'
-
-        menu = "\n-- Open on web | href=%s" % job.url
-
-        print job.displayName() + style + menu
+if len(otherPipelines):
+    print 'Other pipelines:'
+    print '---'
+    printPipelines(otherPipelines)
 
 print '---'
 print 'Update now | refresh=true'
